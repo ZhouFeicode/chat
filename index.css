@@ -1,0 +1,65 @@
+.headline-header{
+    width:100%;
+    height:10%;
+    display: flex;
+    flex-flow: column wrap;
+    align-items: center;
+    padding: 10px;
+}
+.email-info{
+    width:100%;
+    height:30%;
+    display: flex;
+    flex-flow: row wrap;
+    align-items: center;
+    padding-bottom:5px;
+}
+.user-name{
+    font-size: 16px;
+}
+.user-name:hover{
+    cursor: pointer;
+   color:rgb(30, 121, 235)
+}
+.add-icon-container{
+    width: 40%;
+    height: 100%;
+    display: flex;
+    flex-flow: row wrap;
+    justify-content: right;
+        cursor: pointer;
+}
+.add-icon{
+    width: 20px;
+    height: 20px;
+    margin-left: 10px;
+}
+.add-bar-container{
+    width: 90%;
+    height: 60%;
+    position: relative;
+    display: flex;
+    flex-flow: row wrap;
+    justify-content: right;
+}
+.add-bar{
+width: 100px;
+height: 100px;
+padding: 10px;
+display: flex;
+position: absolute;
+flex-flow: column wrap;
+justify-content: right;
+background-color: white;
+border-radius: 5px;
+border:1px solid #e0e0e0;
+box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.1);
+}
+.add-bar-item{
+ font-size: 14px;
+ margin: 5px;
+ cursor: pointer;
+}
+.add-bar-item:hover{
+    color:rgb(30, 121, 235)
+}
