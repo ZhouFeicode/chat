@@ -72,6 +72,9 @@ router
         <span style="width:90%;">{{file.name}}</span>
         <el-button @click="showFileDialog=true" :icon="Download">Save</el-button>
         </div>
+        <div class="file-content">
+        {{file.content}}
+        </div>
         </div>
         <el-dialog
 v-model="showFileDialog"
@@ -90,7 +93,7 @@ width="300px"
     </div>
 </template>
 <script setup>
-import { ref,computed,onMounted } from 'vue';
+import { ref,computed,onMounted,onBeforeUnmount } from 'vue';
 import groupStore from '@/stores/group'
 import { ElMessage } from 'element-plus'
 import { Folder,Notebook,Search,Download,ArrowLeft } from '@element-plus/icons-vue'
@@ -137,12 +140,10 @@ const getGroupMessages = async () => {
     const res=await GroupStore.getGroupMessages({groupId:activeGroup.value[0]})
     if(res&&res.code==200){
         messages.value = res.data
-        console.log(messages.value)
         for (const m of messages.value){
         const  msg=m[2]
         if (msg.includes('send file:')){
             const parts=msg.split(':')
-        console.log(parts)
             if(parts.length>=3 && parts[2].includes('b')){
                 filepackage.value=parts[1]
                 m[2]=null
@@ -224,7 +225,6 @@ const getActiveStatus=async()=>{
     const res=await GroupStore.getActiveStatus({groupId:activeGroup.value[0]})
     if(res&&res.code==200){
         ingroup.value=res.data
-        console.log(ingroup.value)
     }
     else{
         ElMessage.error(res.message)
@@ -245,7 +245,6 @@ const viewFile = async(id,name) => {
     if (res){
         file.value={id:id,name:name,content:res}
         temp.value= activeGroup.value
-        console.log(temp.value)
         activeGroup.value=['','','']
     }
 }
@@ -264,7 +263,30 @@ const returnGroup=()=>{
     activeGroup.value=temp.value
     file.value={id:0,name:'',content:''}
 }
+let ws=null
+onMounted(()=>{
+ws=new WebSocket("ws://localhost:5000/api/ws")
+ws.onopen=()=>{
+    console.log("connected")
+}
 
+ws.onmessage=(event)=>{
+    console.log("data",event.data)
+    if(activeGroup.value[0]){
+
+   getGroupMessages()}
+}
+ws.onclose=()=>{
+    console.log("disconnected")
+}
+ws.onerror=(event)=>{
+    console.log("error",event)
+}
+})
+onBeforeUnmount(()=>{
+    ws.close()
+    ws=null
+})
 </script>
 <style scoped>
 .home-container{
@@ -455,5 +477,14 @@ margin:4px;
     display:flex;
     flex-flow:row nowrap;
     align-items: center;
+}
+.file-content{
+    width:100%;
+    height:90%;
+    padding:10px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background-color: white;
+
 }
 </style>

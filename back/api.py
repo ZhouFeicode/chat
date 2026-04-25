@@ -1,4 +1,4 @@
-from flask import Flask,request,jsonify,Response
+from flask import Flask,request,jsonify,Response,abort
 import pymysql
 import smtplib
 import random
@@ -9,6 +9,8 @@ from flask_cors import CORS
 from email.mime.text import MIMEText
 import socket
 import threading
+from flask_sock import Sock
+import ast
 app=Flask(__name__)
 username=''
 CORS(app,resources={r"/api/*": {"origins": "http://localhost:5173"}})
@@ -18,9 +20,26 @@ EMAIL_PORT = 465
 EMAIL_USER = 'amailabao@sina.com'
 EMAIL_PASS ='0c6e8d5c85b74cfe'
 EXPIRE_CODE=[]
+sock=Sock(app)
+client=None
 def get_db_connection():
     conn=pymysql.connect(host='localhost',user='root',password='root',database='chat',charset='utf8mb4')
     return conn
+@sock.route('/api/ws')
+def websocket(ws_conn):
+    global client
+    client=ws_conn
+    print("client connected")
+    client.send("connected successfully")
+    while True:
+        msg=client.receive()
+        if not msg:
+            break
+        print("data",msg)
+    client=None
+    
+   
+
 @app.route('/api/sendCode',methods=['POST'])
 def sendCode():
     global EXPIRE_CODE
@@ -49,7 +68,6 @@ def sendCode():
 @app.route('/api/login',methods=['POST'])
 def login():
     global EXPIRE_CODE,username,my_port,udp_ips
-    print("ex",EXPIRE_CODE)
     data=request.get_json()
     email=data.get('email')
     code=data.get('code')
@@ -74,8 +92,10 @@ def login():
     if result and result[0] and not result[1]:
         return jsonify({'code':201,'data':{'email':email},'message':'no password, please set password'})
     peer.sendto(encrypt(f"!join:ALL:{username}:hello").encode('utf-8'),(BROADCAST,PORT))
+    group_list=intoChat(username)
+    for group in group_list:
+        store_msg(group,username,"comes into the chat")
     _,my_port=peer.getsockname()
-    print("my_address:",my_ip,my_port)
     udp_ips[(my_ip,my_port)]=username
     cursor.execute("insert into user (email) values (%s)",(email,))
     table_name=email+'_groups'
@@ -136,7 +156,6 @@ def accountLogin():
             username=email
             peer.sendto(encrypt(f"!join:ALL:{username}:hello").encode('utf-8'),(BROADCAST,PORT))
             _,my_port=peer.getsockname()
-            print("my_address:",my_ip,my_port)
             udp_ips[(my_ip,my_port)]=username
             return jsonify({'code':200,'data':{'email':email},'message':'login successfully'})
         return jsonify({'code':400,'message':'Email or password is incorrect'})
@@ -297,16 +316,16 @@ def intoChat(sender):
         group_list=[i[0] for i in groups]
         if group_list:
             return group_list
-        return False
+        return []
     except Exception as e:
-        return False
+        return []
     finally:
         if cursor:
             cursor.close()
         if conn:
             conn.close()
 def listen_for_group():
-    global udp_ips,my_port
+    global udp_ips,my_port,client
     node=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
     node.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
     node.bind(("",PORT))
@@ -317,10 +336,12 @@ def listen_for_group():
         data,addr=node.recvfrom(5096)
         msg=decrypt(data.decode('utf-8'))
         parts=msg.split(':')
-        print("username",username)
         if len(parts)<4:
             continue
         parts=msg.split(':',4)
+        if client:
+            client.send("message update")
+            print("message update")
         if parts[0]=='!join' and parts[2]!=username:
             udp_ips[addr]=parts[2]
             print(f"User {parts[2]} comes into the chat")
@@ -330,6 +351,16 @@ def listen_for_group():
                 group_id=check_in_group(group)
                 if group_id:
                     send_to_group(group_id,"welcome "+parts[2]+" comes into the chat")
+        elif parts[0]=='!leave' and parts[2]!=username:
+            for user in udp_ips:
+                if udp_ips[user]==parts[2]:
+                    del udp_ips[user]
+                    break
+            group_list=intoChat(parts[2])
+            for group in group_list:
+                group_id=check_in_group(group)
+                if group_id:
+                    store_msg(group,parts[2],"leaves the chat")
         elif parts[0]=='!msg' and parts[2]!=username :
             udp_ips[addr]=parts[2]
             timestamp=time.strftime('%H:%M:%S')
@@ -403,8 +434,12 @@ def tcp_listener():
     while True:
         conn,addr=listener.accept()
         data=conn.recv(5096)
-        msg=data.decode('utf-8')
+        msg=decrypt(data.decode('utf-8'))
         parts=msg.split(':')
+        print("tcp message received",msg)
+        if client:
+            client.send("tcp message update")
+            print("tcp message update")
         if parts[0]=='SEARCH_RESULT':
             username=parts[3]
             store_msg(parts[1],parts[2],f"search result: {parts[4]}")
@@ -466,13 +501,21 @@ def send_to_group(group_id,msg):
     conn.close()
 @app.route('/api/group/logout',methods=['POST'])
 def logout():
-    global username
+    global username,udp_ips,my_ip,my_port,client
     data=request.get_json()
     email=data.get('email')
     if not email:
         return jsonify({'code':400,'message':'Email is required'})
-    if username==email or not username:
+    if username==email or username=='':
+        peer.sendto(encrypt(f"!leave:ALL:{username}:bye").encode('utf-8'),(BROADCAST,PORT))
+        groups=intoChat(username)
+        for group in groups:
+            store_msg(group,username,"leaves the chat")
         username=''
+        udp_ips.clear();my_ip=''; my_port=0
+        if client:
+            client.close()
+        client=None
         return jsonify({'code':200,'message':'Logout successfully'})
     return jsonify({'code':400,'message':'Email is incorrect'})
 def get_group_files():
@@ -666,7 +709,7 @@ def viewFile():
         cursor.execute(f"select msg from `{username}_gm` where id=%s",(messageId,))
         msg=cursor.fetchone()[0]
         file=msg.split(":")[2]
-        return Response(file)
+        return Response(ast.literal_eval(file))
     except Exception as e:
         return Response("View file failed"+str(e))
     finally:
@@ -678,12 +721,5 @@ peer=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 peer.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
 if __name__=='__main__':
     threading.Thread(target=listen_for_group).start()
-    try:
-        client=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        client.connect(("localhost",10000))
-        my_ip,_=client.getsockname()
-    except Exception as e:
-        print("Error getting my address:",e)
     threading.Thread(target=tcp_listener).start()
-    app.run(debug=True,host='0.0.0.0',port=5000)
-    
+    app.run(host='0.0.0.0', port=5000, debug=True)
