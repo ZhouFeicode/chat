@@ -3,7 +3,7 @@ import Login from '@/views/auth/Login.vue'
 import SetPassword from '@/views/auth/SetPassword.vue'
 import AccountLogin from '@/views/auth/AccountLogin.vue'
 import Home from '@/views/pages/Home.vue'
-import Messages from '@/views/component/Messages.vue'
+import Files from '@/views/component/Files.vue'
 import Friends from '@/views/component/Friends.vue'
 import Groups from '@/views/component/Groups.vue'
 const routes = [
@@ -31,9 +31,9 @@ const routes = [
   component:Home,
   children:[
     {
-      path:'messages',
-      name:'messages',
-      component:Messages
+        path:'files',
+      name:'files',
+      component:Files
     },
     {
       path:'friends',

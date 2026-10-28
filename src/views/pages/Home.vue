@@ -11,27 +11,27 @@ mode="vertical"
 router
 @select="handleSelect"
         >
-            <el-menu-item class="menu-item" index="/home/messages">
+            <el-menu-item  class="menu-item" index="/home/files">
                 <img src="@/assets/message.png" class="menu-img">
-                <span>Messages</span>
+                <span>Files</span>
             </el-menu-item>
-            <el-menu-item class="menu-item" index="/home/friends">
+            <el-menu-item  class="menu-item" index="/home/friends">
                 <img src="@/assets/friend.png" class="menu-img">
                 <span>Friends</span>
             </el-menu-item>
-            <el-menu-item class="menu-item" index="/home/groups">
+            <el-menu-item  class="menu-item" index="/home/groups">
                 <img src="@/assets/group.png" class="menu-img">
                 <span>Groups</span>
             </el-menu-item>
         </el-menu>
         </div>
         <div class="headline-container">
-        <router-view @activateGroup="activateGroup"/>
+        <router-view @activateGroup="activateGroup" @activateFriend="activateFriend" @activateFile="activateFile" :fetch="fetch" @updateFetch="updateFetch" :refresh="refresh" @updateRefresh="updateRefresh"/>
         </div>
         <div v-if="activeGroup[0]" class="content-container">
         <div class="message-header">
         <div class="group-name-container">
-        <span  class="group-name">{{activeGroup[2]}}:{{activeGroup[1]}}</span>
+        <span >{{activeGroup[2]}}:{{activeGroup[1]}}</span>
         </div>
         <div class="group-buttons">
         <el-button style="width:70px;" :icon="Notebook" @click="viewMembers">Users</el-button>
@@ -42,8 +42,8 @@ router
         <div class="message-item" v-for="message in messages" :key="message[0]">
         <div class="message-item-container">
         <span class="item-sender">{{message[1]}}:</span>
-        <div v-if="message[2]==null" class="item-package" @click="viewFile(message[0],filepackage)">
-         <span style="width:80%" >{{filepackage}}</span>
+        <div v-if="message[2].file" class="item-package" @click="viewFile(message[0],message[2].file)">
+         <span style="width:80%" >{{message[2].file}}</span>
          <img class="file-img" src="@/assets/file.png">
         </div >
        <span  v-else-if="message[1]!=username" class="item-content" >{{message[2]}}</span>
@@ -64,18 +64,66 @@ router
         <el-button :disabled="!message" type="primary" @click="sendMessage" >Send</el-button>
         </div>
         </div>
-       
         </div>
-         <div v-if="file.name" class="file-container">
+        <!-- Friend content -->
+               <div v-if="activeFriend[0]" class="content-container">
+        <div class="message-header">
+        <div class="friend-name-container">
+        <span >{{activeFriend[0]}}</span>
+        </div>
+        </div>
+        <div class="message-content">
+        <div class="message-item" v-for="message in messages" :key="message[0]">
+        <div class="message-item-container">
+        <span class="item-sender">{{message[1]}}:</span>
+        <div v-if="message[2]['file']" class="item-package" @click="viewFriendFile(message[0],message[2].file)">
+         <span style="width:80%" >{{message[2].file}}</span>
+         <img class="file-img" src="@/assets/file.png">
+        </div >
+       <span  v-else-if="message[1]!=username" class="item-content" >{{message[2]}}</span>
+        <span v-else class="item-content-self">{{message[2]}}</span>
+        <span class="item-datetime">{{convertDate(message[3])}}</span>
+         </div>
+        </div>
+        </div>
+        <div class="send-message-container">
+        <el-input v-model="message" class="message-input" placeholder="Enter your message" />
+        <div class="action-buttons">
+        <el-button @click="selectFile">Select</el-button>
+        <el-button :disabled="!message" type="primary" @click="sendFriendMessage" >Send</el-button>
+        </div>
+        </div>
+        </div>
+        <!-- Friend content -->
+         <div v-if="file.name || friendfile.name || activeFile[0]" class="file-container">
         <div class="file-header">
         <el-icon style="width:30px" size="20" @click="returnGroup"><ArrowLeft /></el-icon>
-        <span style="width:90%;">{{file.name}}</span>
-        <el-button @click="showFileDialog=true" :icon="Download">Save</el-button>
+        <span style="width:90%;">{{file.name || friendfile.name || activeFile[0]}}</span>
+        <el-button v-if="file.name || friendfile.name" @click="showFileDialog=true" :icon="Download">Save</el-button>
+       <el-button v-if="activeFile[0]" @click="showUploadDialog=true" style="width:80px;height:30px;"  :icon="Upload">Upload</el-button>
         </div>
-        <div class="file-content">
-        {{file.content}}
+        <div class="file-content" v-if="file.name ">
+        <el-input type="textarea" v-model="file.content" :rows="60" :cols="50" />
+        </div>
+        <div class="file-content" v-if="friendfile.name ">
+        <el-input type="textarea" v-model="friendfile.content" :rows="60" :cols="50" />
+        </div>
+        <div class="file-content" v-if="activeFile[0]">
+        <el-input type="textarea" v-model="activeFile[1]" :rows="60" :cols="50" />
         </div>
         </div>
+        <!-- Select File Dialog -->
+        <el-dialog v-model="showSelectDialog" title="Select File" width="600px">
+        <div class="private-folder">
+        <span>Private File:</span>
+        <el-radio  class="file-radio" v-model="selectedFile" v-for="file in privateFiles" :key="file" :value="file">{{file}}</el-radio>
+        </div>
+        <template #footer>
+        <el-button @click="showSelectDialog=false">Cancel</el-button>
+        <el-button @click="sendSelectedFile">Send</el-button>
+        </template>
+        </el-dialog>
+        <!-- Save File Dialog -->
         <el-dialog
 v-model="showFileDialog"
 title="Save File"
@@ -90,41 +138,187 @@ width="300px"
         <el-button @click="saveFile(fileType)">Save</el-button>
         </template>
         </el-dialog>
+        <!-- Upload File Dialog -->
+        <el-dialog v-model="showUploadDialog" title="Upload File" width="400px">
+        <el-upload ref="uploadRef" class="upload-bar" accept=".txt" @change="handleFileChange" :auto-upload="false"  :limit="1">
+   <el-radio-group class="upload-radio-group" v-model="uploadFileType">
+           <el-radio value="public">Public</el-radio>
+        <el-radio value="private">Private</el-radio>
+        </el-radio-group>
+   <el-button class="select-file-button">Select File</el-button>
+   </el-upload>
+
+        
+        <template #footer>
+        <el-button @click="showUploadDialog=false">Cancel</el-button>
+        <el-button  @click="uploadFile(uploadFileType)">Upload</el-button>
+        </template>
+        </el-dialog>
     </div>
 </template>
 <script setup>
 import { ref,computed,onMounted,onBeforeUnmount } from 'vue';
 import groupStore from '@/stores/group'
+import fileStore from '@/stores/file'
 import { ElMessage } from 'element-plus'
-import { Folder,Notebook,Search,Download,ArrowLeft } from '@element-plus/icons-vue'
+import { Folder,Notebook,Search,Download,ArrowLeft,Upload } from '@element-plus/icons-vue'
+import friendStore from '@/stores/friend'
+const FileStore = fileStore()
 const username=sessionStorage.getItem('email')
 const message=ref('')
+const showSelectDialog=ref(false)
+const showUploadDialog=ref(false)
+const privateFiles=ref([])
+const selectedFile=ref('')
+const fetch=ref(false)
 const file=ref({
     id:0,
     name:'',
     content:''
 })
+const uploadRef=ref(null)
+const uploadFileType=ref('public')
+const uploadfile=ref(null)
+const handleFileChange=(file,newfile)=>{
+  uploadfile.value=newfile[0].raw
+  console.log(uploadfile.value)
+}
+const uploadFile=async(fileType)=>{
+   if(uploadfile.value===null){
+    ElMessage.error('Please select a file')
+    return
+   }
+    showUploadDialog.value=false
+    const formData=new FormData()
+    formData.append('file',uploadfile.value)
+    formData.append('fileType',fileType)
+    const res=await FileStore.uploadFile(formData)
+    if(res&&res.code==200){
+        fetch.value=true
+        ElMessage.success(res.message)
+    }
+    else{
+        ElMessage.error(res.message)
+    }
+}
+const friendfile=ref({
+    id:0,
+    name:'',
+    content:''
+})
+const refresh=ref(false)
 const fileType=ref('public')
 const ingroup=ref(true)
 const groupstatus=computed(()=>{
     return ingroup.value?'Exit':'Join'
 })
+
 const temp=ref(['','',''])
 const showMembers=ref(false)
 const members=ref([])
 const showFileDialog=ref(false)
+const FriendStore=friendStore()
 const GroupStore = groupStore()
+const activeFriend=ref('')
 const activeGroup = ref(['','',''])
 const activeIndex = ref('/home/messages');
-const handleSelect = (key, keyPath) => {
+const sendSelectedFile=async()=>{
+    const res=await FriendStore.sendSelectedFile({email:activeFriend.value[0],file:selectedFile.value})
+    showSelectDialog.value=false
+    if(res&&res.code==200){
+        getFriendMessages()
+    }
+    else{
+        ElMessage.error(res.message)
+    }
+}
+const sendFriendMessage=async()=>{
+    if(message.value.length>500){
+        ElMessage.error('Message length cannot exceed 500 words.')
+        return
+    }
+    const res=await FriendStore.sendFriendMessage({email:activeFriend.value[0],message:message.value})
+         message.value=''
+    if(res&&res.code==200){
+        getFriendMessages()
+    }
+    else{
+        ElMessage.error(res.message)
+    }
+}
+const selectFile=async()=>{
+    const res=await FriendStore.getAllFiles()
+    if(res&&res.code==200){
+        privateFiles.value=res.data
+    }
+    else{
+        ElMessage.error(res.message)
+    }
+    showSelectDialog.value=true
+}
+const updateFetch = (value) => {
+    fetch.value = value
+}
+const updateRefresh = (value) => {
+    refresh.value = value
+}
+const handleSelect = (key) => {
     activeIndex.value = key;
+    if(key=='/home/files'){
+        activeGroup.value=['','','']
+        activeFriend.value=['','']
+    }
+    else if(key=='/home/friends'){
+        activeGroup.value=['','','']
+        activeFile.value=['','']
+    }
+    else if(key=='/home/groups'){
+        activeFriend.value=['','']
+        activeFile.value=['','']
+    }
+}
+const activateFriend=(friend)=>{
+    activeFriend.value=friend
+    getFriendMessages()
+}
+const activeFile=ref([])
+const activateFile=([file,content])=>{
+activeFile.value=[file,content]
+}
+const friendtemp=ref(['',''])
+const viewFriendFile=async(id,filename)=>{
+    const res=await FriendStore.viewFriendFile({messageId:id})
+    if(res){
+        friendfile.value={id:id,name:filename,content:res}
+        friendtemp.value=activeFriend.value
+        activeFriend.value=['','']
+    }
+    else{
+        ElMessage.error(res.message)
+    }
+}
+const getFriendMessages=async()=>{
+const res= await FriendStore.getFriendMessages({email:activeFriend.value[0]})
+if(res&&res.code==200){
+    messages.value=res.data
+    for(const m of messages.value){
+        if(m[2].includes('send file:')){
+            const parts=m[2].split(':')
+            if(parts.length>=3 && parts[2].includes('b')){
+                m[2]={'file':parts[1]}
+            }
+        }
+    }
+}
+else{
+    ElMessage.error(res.message)
+}
 }
 const activateGroup = (group) => {
     activeGroup.value = group
         getActiveStatus()
         getGroupMessages()
 }
-const filepackage=ref('')
 const messages = ref([])
 const convertDate=(datetime)=>{
     const now=new Date(datetime)
@@ -145,8 +339,7 @@ const getGroupMessages = async () => {
         if (msg.includes('send file:')){
             const parts=msg.split(':')
             if(parts.length>=3 && parts[2].includes('b')){
-                filepackage.value=parts[1]
-                m[2]=null
+                m[2]={'file':parts[1]}
             }
         }
     }
@@ -242,15 +435,21 @@ const searchFiles=async()=>{
 }
 const viewFile = async(id,name) => {
     const res=await GroupStore.viewFile({messageId:id})
-    if (res){
+    if (res || res==''){
         file.value={id:id,name:name,content:res}
         temp.value= activeGroup.value
         activeGroup.value=['','','']
+        console.log("fileres",file)
     }
 }
 const saveFile=async(fileType)=>{
     showFileDialog.value=false
-    const res=await GroupStore.saveFile({fileId:file.value.id,fileType:fileType})
+    let res=''
+    if(file.value.name){
+  res=await GroupStore.saveFile({fileId:file.value.id,fileType:fileType})}
+  else{
+    res=await FriendStore.saveFile({fileId:friendfile.value.id,fileType:fileType})
+  }
     if(res&&res.code==200){
         ElMessage.success('File saved successfully')
     }
@@ -260,8 +459,15 @@ const saveFile=async(fileType)=>{
     
 }
 const returnGroup=()=>{
+    if(file.value.name){
     activeGroup.value=temp.value
-    file.value={id:0,name:'',content:''}
+    file.value={id:0,name:'',content:''}}else if(friendfile.value.name){
+        activeFriend.value=friendtemp.value
+        friendfile.value={id:0,name:'',content:''}
+    }
+    else{
+        activeFile.value=['','']
+    }
 }
 let ws=null
 onMounted(()=>{
@@ -269,13 +475,17 @@ ws=new WebSocket("ws://localhost:5000/api/ws")
 ws.onopen=()=>{
     console.log("connected")
 }
-
 ws.onmessage=(event)=>{
     console.log("data",event.data)
     if(activeGroup.value[0]){
-
    getGroupMessages()}
+   else if(activeFriend.value[0]){
+    getFriendMessages()
+   }
+refresh.value=true
 }
+
+
 ws.onclose=()=>{
     console.log("disconnected")
 }
@@ -391,6 +601,8 @@ flex-flow: column wrap;
     padding:4px;
     font-size:15px;
     margin:0 5px;
+     min-width:10px;
+    min-height:20px;
 
 }
 .item-package{
@@ -433,7 +645,7 @@ margin:4px;
     width:15px;
     height:15px;
 }
-.group-name-container{
+.group-name-container,.friend-name-container{
     width:80%;
     height:100%;
     display: flex;
@@ -486,5 +698,31 @@ margin:4px;
     overflow-x: hidden;
     background-color: white;
 
+}
+.public-folder,.private-folder{
+    width:100%;
+    height:50%;
+    display:flex;
+    flex-flow:column wrap;
+    border-bottom:1px solid #e0e0e0;
+}
+.file-radio{
+    margin:5px;
+    font-size:15px;
+    color:rgba(0,0,0,0.85);
+    font-family: Arial, Helvetica, sans-serif;
+}
+.upload-bar{
+    width:100%;
+    height:100%;
+    display:flex;
+    flex-flow:column wrap;
+}
+.el-radio-group{
+    width:60%;
+}
+.select-file-button{
+    width:30%;
+   margin:10px;
 }
 </style>

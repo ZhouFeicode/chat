@@ -62,7 +62,7 @@ const groupStore = defineStore('groupStore',()=> {
         return res.data
     }
     const saveFile=async({fileId,fileType})=>{
-        const res=await axios.get(`http://localhost:5000/api/group/saveFile`,{fileId:fileId,fileType:fileType })
+        const res=await axios.post(`http://localhost:5000/api/group/saveFile`,{fileId:fileId,fileType:fileType })
         return res.data
     }
     return {getGroups,createGroup,joinGroup,addFriend,logout,getGroupMessages,sendMessage,getGroupFiles,getGroupUsers,getGroupMembers,exitGroup,intoGroup,getActiveStatus,searchFiles,viewFile,saveFile}
